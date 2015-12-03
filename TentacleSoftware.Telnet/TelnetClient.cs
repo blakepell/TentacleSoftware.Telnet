@@ -23,7 +23,7 @@ namespace TentacleSoftware.Telnet
         private StreamReader _tcpReader;
         private StreamWriter _tcpWriter;
 
-        public EventHandler<string> MessageReceived;
+        public EventHandler<MessageEventArgs> MessageReceived;
         public EventHandler ConnectionClosed;
 
         /// <summary>
@@ -52,7 +52,7 @@ namespace TentacleSoftware.Telnet
         /// <returns></returns>
         public Task Connect()
         {
-            return Task.Run(() =>
+            return TaskEx.Run(() =>
             {
                 if (_tcpClient != null)
                 {
@@ -77,7 +77,7 @@ namespace TentacleSoftware.Telnet
         /// <returns></returns>
         public Task Connect(string socks4ProxyHost, int socks4ProxyPort, string socks4ProxyUser)
         {
-            return Task.Run(async () =>
+            return TaskEx.Run(async () =>
             {
                 if (_tcpClient != null)
                 {
@@ -143,14 +143,15 @@ namespace TentacleSoftware.Telnet
         {
             if (message == null)
             {
-                return Task.FromResult(1);
+                return TaskEx.FromResult(1);
             }
 
-            Task task = Task.Run(async () =>
+            var task = TaskEx.Run(async () =>
             {
                 // Wait for any previous send commands to finish and release the semaphore
                 // This throttles our commands
-                await _sendRateLimit.WaitAsync(_internalCancellation.Token);
+//                await _sendRateLimit.WaitAsync(_internalCancellation.Token);
+                await TaskEx.Run(() => _sendRateLimit.Wait(_internalCancellation.Token));
 
                 if (_internalCancellation.Token.IsCancellationRequested)
                 {
@@ -188,7 +189,7 @@ namespace TentacleSoftware.Telnet
                 if (!send.IsCanceled && !send.IsFaulted && !_internalCancellation.Token.IsCancellationRequested)
                 {
                     // Wait some time to prevent flooding
-                    await Task.Delay(_sendRate, _internalCancellation.Token);
+                    await TaskEx.Delay(_sendRate, _internalCancellation.Token);
                 }
 
                 // Exit our lock
@@ -218,7 +219,7 @@ namespace TentacleSoftware.Telnet
                 throw new InvalidOperationException("Connect task failed to complete. Aborting.");
             }
 
-            return Task.Run(async () =>
+            return TaskEx.Run(async () =>
             {
                 while (!_internalCancellation.Token.IsCancellationRequested)
                 {
@@ -302,11 +303,11 @@ namespace TentacleSoftware.Telnet
 
         private void OnMessageReceived(string message)
         {
-            EventHandler<string> messageReceived = MessageReceived;
+            var messageReceived = MessageReceived;
 
             if (messageReceived != null)
             {
-                messageReceived(this, message);
+                messageReceived(this, new MessageEventArgs(message));
             }
         }
 
